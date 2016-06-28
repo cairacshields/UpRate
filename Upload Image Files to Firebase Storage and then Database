@@ -1,0 +1,128 @@
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.net.Uri;
+import android.provider.MediaStore;
+import android.support.annotation.NonNull;
+import android.support.v7.app.AppCompatActivity;
+import android.os.Bundle;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
+import android.view.View;
+import android.widget.ImageView;
+import android.widget.Switch;
+import android.widget.Toast;
+
+import com.firebase.client.Firebase;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
+import com.google.firebase.storage.UploadTask;
+
+public class Home extends AppCompatActivity implements View.OnClickListener{
+
+    DatabaseReference reference = FirebaseDatabase.getInstance().getReference();
+    FirebaseStorage storage = FirebaseStorage.getInstance();
+    StorageReference imageRef = storage.getReferenceFromUrl("gs://uprate-508ca.appspot.com");
+    public static final int REQUEST_CAPTURE = 1;
+    ImageView button, uploadedImage;
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_home);
+
+        Firebase.setAndroidContext(this);
+
+        button = (ImageView)findViewById(R.id.imageView);
+        uploadedImage =(ImageView)findViewById(R.id.uploadedImage);
+
+        button.setOnClickListener(this);
+    }
+
+    //Inflates menu options
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        MenuInflater inflater = getMenuInflater();
+        inflater.inflate(R.menu.main_menu, menu);
+        return super.onCreateOptionsMenu(menu);
+    }
+
+    //Method that handles options menu item selections
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        int id = item.getItemId();
+
+        if(id == R.id.item_logout){
+            //Logout users and send back to Login Activity
+            FirebaseAuth.getInstance().signOut();
+
+            Intent i = new Intent(Home.this, Login.class);
+            i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(i);
+            finish();
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    public void onClick(View view) {
+        switch (view.getId()){
+
+            //Send user to gallery when upload button is clicked
+            case R.id.imageView:
+                Intent i = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+                startActivityForResult(i, REQUEST_CAPTURE);
+                break;
+        }
+    }
+
+    //Method to handle what happens to the selected image
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        //Get a more specific reference to our database
+        final DatabaseReference images = reference.child("Images");
+
+        if (requestCode == REQUEST_CAPTURE && resultCode == RESULT_OK){
+
+            //Get our image and store it as a Uri
+           Uri imageUri = data.getData();
+
+            //Give the user a visual of the image they uploaded
+            uploadedImage.setImageURI(imageUri);
+
+            //Make a reference to our Firebase Storage and make it specific 
+            StorageReference pics = imageRef.child("UserImages" + imageUri.getLastPathSegment());
+
+            //Put our new image into our storage 
+            UploadTask uploadTask = pics.putFile(imageUri);
+
+            //Use UploadTask Listeners to handle upload failures and successes 
+            uploadTask.addOnFailureListener(new OnFailureListener() {
+                @Override
+                public void onFailure(@NonNull Exception e) {
+                    Toast.makeText(Home.this, "Upload Failed!", Toast.LENGTH_LONG).show();
+                }
+            }).addOnSuccessListener(new OnSuccessListener<UploadTask.TaskSnapshot>() {
+                @Override
+                public void onSuccess(UploadTask.TaskSnapshot taskSnapshot) {
+                    //Get the Uri so that we can send it to the real-time database 
+                    Uri downloadUrl = taskSnapshot.getDownloadUrl();
+
+                    //If our upload succeeds, we save our Uri into the Firebase real-time database
+                    Images picture = new Images(downloadUrl);
+                    images.push().setValue(picture);
+                    Toast.makeText(Home.this, "Uploaded Successfully!", Toast.LENGTH_LONG).show();
+                }
+            });
+
+
+        }
+    }
+}
