@@ -1,5 +1,3 @@
 # UpRate
-Another Android application project that I'm dabbling with. 
-
-Feel free to requst any changes! 
+Using Google's Firebase to store and upload user images from an Android device. 
 
